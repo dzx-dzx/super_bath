@@ -18,6 +18,9 @@ let bucket = `bath`
 
 let writeClient = client.getWriteApi(org, bucket, 'ns')
 
+const browser = await puppeteer.launch();
+const page = await browser.newPage();
+
 async function wait(time) {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -27,15 +30,16 @@ async function wait(time) {
 }
 
 async function getCredentials() {
-    const browser = await puppeteer.launch();
-    const page = await browser.newPage();
     await page.goto('https://bath.sjtu.edu.cn/');
-    console.log("Scan the code to login:")
-    await page.screenshot({ path: "login.jpg" })
+    console.log(page.url())
+    if ((new URL(page.url())).hostname === "jaccount.sjtu.edu.cn") {
+        console.log("Scan the code to login:")
+        await page.screenshot({ path: "login.jpg" })
 
-    await page.waitForNavigation()
-    console.log("Log in successfully.")
-    await page.screenshot({ path: "bath.jpg" })
+        await page.waitForNavigation()
+        console.log("Log in successfully.")
+        await page.screenshot({ path: "bath.jpg" })
+    }
     return page.cookies()
 }
 
@@ -53,13 +57,17 @@ async function getBathNum() {
         cookieJar
     }).json()).entities[0].equipment[0]
     console.log(equipments)
-    let point = new Point('bath_people')
-        .tag("dormitory_name", equipments["buildingname"])
-        .intField('free', equipments["idle"])
-        .intField('used', equipments["total"] - equipments["idle"])
-    writeClient.writePoint(point)
 
-    await writeClient.flush()
+    await saveToInflux(equipments);
+
+    async function saveToInflux(equipments) {
+        let point = new Point('bath_people')
+            .tag("dormitory_name", equipments["buildingname"])
+            .intField('free', equipments["idle"])
+            .intField('used', equipments["total"] - equipments["idle"]);
+        writeClient.writePoint(point);
+        await writeClient.flush()
+    }
 }
 (async () => {
     while (true) {
