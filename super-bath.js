@@ -40,25 +40,36 @@ async function getCredentials() {
         console.log("Log in successfully.")
         await page.screenshot({ path: "bath.jpg" })
     }
+    else await page.reload()
+    await page.screenshot({ path: "final.jpg" })
     return page.cookies()
 }
 
 async function getBathNum() {
 
     await (got('https://bath.sjtu.edu.cn/api/me/info', {
-        cookieJar
+        cookieJar,
+        timeout: {
+            request: 10000
+        }
     })).catch(async (e) => {
         const cookie = (await getCredentials()).find((e) => e["name"] === "JSESSIONID")
         await cookieJar.setCookie(new Cookie({ value: cookie["value"], key: cookie["name"] }), 'https://bath.sjtu.edu.cn');
         console.log(cookieJar)
     })
 
-    const equipments = (await got('https://bath.sjtu.edu.cn/api/water/equipments', {
-        cookieJar
-    }).json()).entities[0].equipment[0]
-    console.log(equipments)
+    const equipmentsData = (await got('https://bath.sjtu.edu.cn/api/water/equipments', {
+        cookieJar,
+        timeout: {
+            request: 10000
+        }
+    }).json())
+
+    const equipments = equipmentsData.entities[0].equipment[0]
+    console.log(equipments["idle"], equipments["total"], Date())
 
     await saveToInflux(equipments);
+    console.log("Saved")
 
     async function saveToInflux(equipments) {
         let point = new Point('bath_people')
@@ -71,7 +82,12 @@ async function getBathNum() {
 }
 (async () => {
     while (true) {
-        await getBathNum()
+        try {
+            await getBathNum()
+        }
+        catch (e) {
+            console.log(e)
+        }
         await wait(15000)
     }
 })()
